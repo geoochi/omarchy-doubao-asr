@@ -34,6 +34,8 @@ func main() {
 		os.Exit(runDaemon())
 	case "start", "stop", "toggle", "cancel", "status", "ping":
 		os.Exit(runClient(cmd))
+	case "type":
+		os.Exit(runTypeCommand(os.Args[2:]))
 	case "help", "-h", "--help":
 		usage()
 	default:
@@ -51,6 +53,7 @@ Usage:
   doubao-dictate start|stop|toggle      control recording
   doubao-dictate cancel                 discard the current recording
   doubao-dictate status                 print the daemon state
+  doubao-dictate type <text>            type text into the focused window
 `)
 }
 
@@ -68,6 +71,28 @@ func runDaemon() int {
 	d.shutdown()
 	if err != nil {
 		logger.Error("daemon", "error", err)
+		return 1
+	}
+	return 0
+}
+
+// runTypeCommand types text straight into the focused window. It exists for
+// manually testing the output path and needs no daemon.
+func runTypeCommand(args []string) int {
+	text := strings.Join(args, " ")
+	if strings.TrimSpace(text) == "" {
+		fmt.Fprintln(os.Stderr, "usage: doubao-dictate type <text>")
+		return 2
+	}
+	cfg, err := loadConfig()
+	if err != nil {
+		logger.Error("load config", "error", err)
+		return 1
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := typeText(ctx, cfg, text); err != nil {
+		logger.Error("type failed", "error", err)
 		return 1
 	}
 	return 0

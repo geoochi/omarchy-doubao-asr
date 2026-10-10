@@ -3,7 +3,7 @@
 https://github.com/user-attachments/assets/55a79a79-5133-4646-84c1-9bbc3b6e98e6
 
 在 Omarchy / Hyprland 上用**豆包(火山引擎)语音识别**做语音听写:按一下热键开始说话,
-再按一下停止,识别结果用 `wtype` **直接打进当前光标位置**。
+再按一下停止,识别结果通过内置的 Wayland 虚拟键盘**直接打进当前光标位置**(不依赖 wtype)。
 
 - **一条命令安装**,全程用户级,不需要 `sudo`,不需要装 Python 或 Go
 - **单文件 Go 二进制**,常驻内存只有几 MB
@@ -57,6 +57,9 @@ systemctl --user restart doubao-dictate
 
 录音中右上角会弹出 `🎤 Recording` 通知,停止后弹出 `Transcribing…`,识别完自动打字。
 
+> 想跳过录音直接测试输入效果,可以手动执行 `doubao-dictate type "测试文字"`,
+> 文字会立刻打进当前焦点窗口。
+
 > 用的是**按一下开 / 按一下关**,而不是长按说话。因为在部分环境下 Hyprland 的"松键"
 > 事件会偶发丢失,长按会停不下来。另有一层保险:即使忘了按停止,达到
 > `DOUBAO_MAX_DURATION_SECS`(默认 120 秒)也会自动停止。
@@ -75,7 +78,8 @@ systemctl --user restart doubao-dictate
 | `DOUBAO_DEVICE` | 输入设备,默认 `default`(跟随系统默认输入源),也可写具体 pulse 源名 |
 | `DOUBAO_SAMPLE_RATE` / `DOUBAO_SEGMENT_MS` | 录音参数,一般不用动 |
 | `DOUBAO_MAX_DURATION_SECS` | 单次录音上限,默认 120 |
-| `DOUBAO_MODE` | `type`(默认,用 wtype 打字)/ `clipboard`(用 wl-copy 复制) |
+| `DOUBAO_MODE` | `type`(默认,内置 Wayland 虚拟键盘直接打字)/ `clipboard`(用 wl-copy 复制) |
+| `DOUBAO_TYPE_DELAY_MS` | 打字时每个字符之间的间隔(毫秒),默认 `10`;个别应用偶发丢字时可调大 |
 | `DOUBAO_NOTIFY` | 桌面通知开关,默认 `true` |
 
 改完配置要重启服务生效:
@@ -119,7 +123,11 @@ hyprctl reload
   API Key 不对,或控制台里还没开通「流式语音识别」。检查 `.env` 里的 `DOUBAO_API_KEY`。
 - **不打字**
   确认守护进程环境里有 `WAYLAND_DISPLAY`
-  (`systemctl --user show-environment | grep WAYLAND_DISPLAY`),以及 `wtype` 已安装。
+  (`systemctl --user show-environment | grep WAYLAND_DISPLAY`)。
+- **在 Chrome / Chromium 里打字缺字、字符被吞或被删**
+  老版本用 `wtype` 打字时,文字会被分配到 Backspace / Tab 等物理键位上,
+  Chromium 会按物理键位解释导致丢字(正文越长越容易出现)。
+  现在打字由内置实现完成,只使用可打印键位,不再有这个问题。
 - **识别重复 / 句子被截断**
   检查 `DOUBAO_URL` 是 `…/bigmodel_nostream`(非流式整段识别)。
 - **命令连不上守护进程**
@@ -139,8 +147,9 @@ hyprctl reload
 2. 再次收到 `toggle`(或到达时长上限):结束录音;
 3. 用 WebSocket 连 `DOUBAO_URL`,带 `X-Api-Key` 等鉴权头;先发一帧会话配置(JSON + gzip),
    再把整段 PCM 分块发出去,最后一帧用负序号标记结束;
-4. 读服务器返回的最终包,取出 `result.text`,用 `wtype -` 打进焦点窗口
-   (`DOUBAO_MODE=clipboard` 时改用 `wl-copy`);
+4. 读服务器返回的最终包,取出 `result.text`,通过内置的 Wayland 虚拟键盘
+   (`zwp_virtual_keyboard_v1`)打进焦点窗口:文字只分配到可打印键位,超过 48 个
+   不同字符时按段自动重连(`DOUBAO_MODE=clipboard` 时改用 `wl-copy`);
 5. 状态回到 `idle`。
 
 守护进程只通过 `$XDG_RUNTIME_DIR/doubao-dictate.sock` 上的简单文本命令控制
@@ -160,11 +169,11 @@ hyprctl reload
 
 普通用户用上面的安装脚本就够了,下面这些只是给想自己编译的人。
 
-需要 `parecord`(pipewire-pulse)、`wtype`、可选的 `notify-send`(libnotify)、
+需要 `parecord`(pipewire-pulse)、可选的 `notify-send`(libnotify)、
 `Go ≥ 1.23`、Hyprland + systemd 用户会话。Omarchy / Arch:
 
 ```bash
-omarchy-pkg-add wtype libnotify        # 或 sudo pacman -S wtype libnotify
+omarchy-pkg-add libnotify              # 或 sudo pacman -S libnotify
 git clone https://github.com/geoochi/omarchy-doubao-asr.git
 cd omarchy-doubao-asr
 go build -o doubao-dictate .

@@ -7,19 +7,17 @@ import (
 	"strings"
 )
 
-// outputText delivers the transcript to the focused window, either by typing it
-// (wtype) or by putting it on the clipboard (wl-copy).
+// outputText delivers the transcript to the focused window: by default it is
+// typed through the built-in Wayland virtual keyboard (typer.go), with
+// "clipboard" mode putting it on the clipboard via wl-copy instead.
 func outputText(ctx context.Context, cfg *Config, text string) error {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
-	switch cfg.Mode {
-	case "clipboard":
+	if cfg.Mode == "clipboard" {
 		return runWithStdin(ctx, text, "wl-copy")
-	default:
-		// `wtype -` types whatever it reads from stdin.
-		return runWithStdin(ctx, text, "wtype", "-")
 	}
+	return typeText(ctx, cfg, text)
 }
 
 func runWithStdin(ctx context.Context, input string, name string, args ...string) error {

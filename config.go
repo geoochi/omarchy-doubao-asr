@@ -22,7 +22,8 @@ type Config struct {
 	SampleRate  int
 	SegmentMS   int
 	MaxDuration time.Duration
-	Mode        string // "type" (wtype) or "clipboard" (wl-copy)
+	Mode        string // "type" (built-in Wayland typer) or "clipboard" (wl-copy)
+	TypeDelayMS int    // pause between typed characters, in milliseconds
 	Notify      bool
 }
 
@@ -138,6 +139,7 @@ func loadConfig() (*Config, error) {
 		SegmentMS:   getInt("DOUBAO_SEGMENT_MS", 200),
 		MaxDuration: time.Duration(getInt("DOUBAO_MAX_DURATION_SECS", 120)) * time.Second,
 		Mode:        get("DOUBAO_MODE", "type"),
+		TypeDelayMS: getInt("DOUBAO_TYPE_DELAY_MS", 10),
 		Notify:      getBool("DOUBAO_NOTIFY", true),
 	}
 	return cfg, nil
